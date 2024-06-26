@@ -1,35 +1,26 @@
-// Before publishing your new repository:
-// 1. Write the readme file
-// 2. Update the issues link in Contributing section in the readme file
-// 3. Update the discussion link in config.yml file in .github/ISSUE_TEMPLATE directory
+= Java zero copy networking library - net_01
 
-= repo-template
-
-// Add a short description of your project. Tell what your project does and what it's used for.
-
-This is a template repository for Teragrep organization.
+Java zero copy networking library
 
 == Features
 
-// List your project's features
+TBD
 
 == Documentation
 
-See the official documentation on https://docs.teragrep.com[docs.teragrep.com].
+TBD
 
 == Limitations
 
-// If your project has limitations, please list them. Otherwise remove this section.
+TBD
 
-== How to [compile/use/implement]
+== How to compile/use
 
-// add instructions how people can start to use your project
+TBD
 
 == Contributing
 
-// Change the repository name in the issues link to match with your project's name
-
-You can involve yourself with our project by https://github.com/teragrep/repo-template/issues/new/choose[opening an issue] or submitting a pull request.
+You can involve yourself with our project by https://github.com/teragrep/net_01/issues/new/choose[opening an issue] or submitting a pull request.
 
 Contribution requirements:
 

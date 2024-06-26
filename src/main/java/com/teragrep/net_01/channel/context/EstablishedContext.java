@@ -1,5 +1,5 @@
 /*
- * Java Zero Copy Networking Library NET-01
+ * Java Zero Copy Networking Library net_01
  * Copyright (C) 2024 Suomen Kanuuna Oy
  *
  * This program is free software: you can redistribute it and/or modify

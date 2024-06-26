@@ -60,12 +60,6 @@
   <build>
     <directory>${project.basedir}/target</directory>
     <finalName>net_01</finalName>
-    <resources>
-      <resource>
-        <filtering>true</filtering>
-        <directory>src/main/resources</directory>
-      </resource>
-    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -177,7 +171,7 @@
             <license implementation="org.apache.rat.analysis.license.SimplePatternBasedLicense">
               <notes>Also allow the license url to be https.</notes>
               <patterns>
-                <pattern>Java Zero Copy Networking Library NET-01</pattern>
+                <pattern>Java Zero Copy Networking Library net_01</pattern>
               </patterns>
             </license>
           </licenses>
@@ -197,8 +191,6 @@
             <exclude>README.adoc</exclude>
             <!-- spotless formatter -->
             <exclude>eclipse-java-formatter.xml</exclude>
-            <!-- properties file -->
-            <exclude>src/main/resources/**</exclude>
           </excludes>
         </configuration>
         <executions>

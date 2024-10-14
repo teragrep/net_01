@@ -83,6 +83,8 @@ final class BufferLeaseImpl implements BufferLease {
     public ByteBuffer buffer() {
         if (phaser.isTerminated()) {
             System.out.println("Closed already by: " + traceback);
+            traceback.printStackTrace();
+            System.out.println("<<<");
             throw new IllegalStateException(
                     "Cannot return wrapped ByteBuffer, BufferLease phaser was already terminated!"
             );
@@ -94,6 +96,8 @@ final class BufferLeaseImpl implements BufferLease {
     public void addRef() {
         if (phaser.register() < 0) {
             System.out.println("Closed already by: " + traceback);
+            traceback.printStackTrace();
+            System.out.println("<<<");
             throw new IllegalStateException("Cannot add reference, BufferLease phaser was already terminated!");
         }
     }
@@ -102,6 +106,8 @@ final class BufferLeaseImpl implements BufferLease {
     public void removeRef() {
         if (phaser.arriveAndDeregister() < 0) {
             System.out.println("Closed already by: " + traceback);
+            traceback.printStackTrace();
+            System.out.println("<<<");
             throw new IllegalStateException("Cannot remove reference, BufferLease phaser was already terminated!");
         }
     }

@@ -55,6 +55,7 @@ import java.util.concurrent.Phaser;
  */
 final class BufferLeaseImpl implements BufferLease {
 
+    private Exception traceback = null;
     private final BufferContainer bufferContainer;
     private final Phaser phaser;
     private final BufferLeasePool bufferLeasePool;
@@ -81,6 +82,7 @@ final class BufferLeaseImpl implements BufferLease {
     @Override
     public ByteBuffer buffer() {
         if (phaser.isTerminated()) {
+            System.out.println("Closed already by: " + traceback);
             throw new IllegalStateException(
                     "Cannot return wrapped ByteBuffer, BufferLease phaser was already terminated!"
             );
@@ -91,6 +93,7 @@ final class BufferLeaseImpl implements BufferLease {
     @Override
     public void addRef() {
         if (phaser.register() < 0) {
+            System.out.println("Closed already by: " + traceback);
             throw new IllegalStateException("Cannot add reference, BufferLease phaser was already terminated!");
         }
     }
@@ -98,6 +101,7 @@ final class BufferLeaseImpl implements BufferLease {
     @Override
     public void removeRef() {
         if (phaser.arriveAndDeregister() < 0) {
+            System.out.println("Closed already by: " + traceback);
             throw new IllegalStateException("Cannot remove reference, BufferLease phaser was already terminated!");
         }
     }
@@ -123,6 +127,7 @@ final class BufferLeaseImpl implements BufferLease {
 
         @Override
         protected boolean onAdvance(int phase, int registeredParties) {
+            traceback = new Exception("Closed now");
             boolean rv = false;
             if (registeredParties == 0) {
                 buffer().clear();

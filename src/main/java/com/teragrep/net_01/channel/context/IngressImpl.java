@@ -124,9 +124,19 @@ final class IngressImpl implements Ingress {
                     if (interestedClocks.isEmpty()) {
                         continueReading = false;
                     }
+                    LOGGER.debug("continueReading <{}>", continueReading);
 
-                    LOGGER.debug("clock returned continueReading <{}>", continueReading);
-                    if (!bufferLease.isTerminated() && bufferLease.buffer().hasRemaining()) {
+                    if (bufferLease.buffer().hasRemaining()) {
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER
+                                    .debug(
+                                            "bufferLease id <{}> hasRemaining <{}>", bufferLease.id(),
+                                            bufferLease.buffer().remaining()
+                                    );
+                        }
+
+                        bufferLease.addRef(); // a shared buffer
+
                         // return back as it has some remaining
                         LOGGER.debug("pushBack bufferLease id <{}>", bufferLease.id());
                         activeBuffers.push(bufferLease);

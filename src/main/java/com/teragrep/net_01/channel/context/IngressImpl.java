@@ -109,6 +109,7 @@ final class IngressImpl implements Ingress {
                 boolean continueReading = true;
                 while (!activeBuffers.isEmpty()) {
                     BufferLease bufferLease = activeBuffers.removeFirst();
+                    bufferLease.addRef();
                     LOGGER
                             .debug(
                                     "submitting buffer <{}> from activeBuffers <{}> to relpFrame", bufferLease,
@@ -126,7 +127,7 @@ final class IngressImpl implements Ingress {
                     }
 
                     LOGGER.debug("clock returned continueReading <{}>", continueReading);
-                    if (!bufferLease.isTerminated() && bufferLease.buffer().hasRemaining()) {
+                    if (bufferLease.buffer().hasRemaining()) {
                         // return back as it has some remaining
                         LOGGER.debug("pushBack bufferLease id <{}>", bufferLease.id());
                         activeBuffers.push(bufferLease);
@@ -138,6 +139,7 @@ final class IngressImpl implements Ingress {
                                     );
                         }
                     }
+                    bufferLease.removeRef();
                     if (!continueReading) {
                         break;
                     }

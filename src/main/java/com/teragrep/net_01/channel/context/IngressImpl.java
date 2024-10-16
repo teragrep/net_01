@@ -108,6 +108,7 @@ final class IngressImpl implements Ingress {
 
                 boolean continueReading = true;
                 while (!activeBuffers.isEmpty()) {
+                    // IMPORTANT: current tls implementation will skip bytes if BufferLeases are not fully consumed.
                     BufferLease bufferLease = activeBuffers.removeFirst();
                     bufferLease.addRef();
                     LOGGER
@@ -119,6 +120,12 @@ final class IngressImpl implements Ingress {
                     if (!interestedClocks.isEmpty()) {
                         for (Clock clock : interestedClocks) {
                             clock.advance(bufferLease);
+
+                            if (bufferLease.buffer().hasRemaining()) {
+                                // shared buffer between clocks, ready for another
+                                bufferLease.addRef();
+                            }
+
                         }
                     }
 

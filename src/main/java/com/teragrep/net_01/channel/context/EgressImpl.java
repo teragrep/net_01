@@ -56,9 +56,6 @@ import java.io.IOException;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
@@ -67,6 +64,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import static java.nio.channels.SelectionKey.OP_READ;
 import static java.nio.channels.SelectionKey.OP_WRITE;
 
+/**
+ * EgressImpl provides a way to transmit information queue holds information to be transmitted in transmission order
+ * (FIFO) partially transmitted information may reside on the HEAD of the queue and newly added is at the tail. Once all
+ * ByteBuffers of the Writeable are transmitted (consumed) the Writeable is closed and removed from the queue.
+ * Thread-safety is ensured by having a single consumer thread to drain the queue under the lock while allowing multiple
+ * lock-free producers to add more Writeables
+ */
+
 final class EgressImpl implements Egress {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EgressImpl.class);
@@ -74,23 +79,17 @@ final class EgressImpl implements Egress {
     private final EstablishedContext establishedContext;
 
     private final ConcurrentLinkedQueue<Writeable> queue;
-    private final ArrayList<Writeable> writeInProgressList; // lock protected
 
     private final Lock lock;
 
     // tls
     private final AtomicBoolean needRead;
 
-    private final List<Writeable> toWriteList;
-
     EgressImpl(EstablishedContext establishedContext) {
         this.establishedContext = establishedContext;
         this.queue = new ConcurrentLinkedQueue<>();
-        this.writeInProgressList = new ArrayList<>();
         this.lock = new ReentrantLock();
         this.needRead = new AtomicBoolean();
-
-        this.toWriteList = new ArrayList<>();
     }
 
     // this must be thread-safe!
@@ -103,30 +102,23 @@ final class EgressImpl implements Egress {
 
         while (queue.peek() != null) {
             if (lock.tryLock()) {
-                try {
-                    while (true) {
-                        Writeable w = queue.poll();
-                        if (w != null) {
-                            if (LOGGER.isTraceEnabled()) {
-                                LOGGER
-                                        .trace(
-                                                "adding writable to toWriteList.size <{}>, writeInProgressList.size <{}>",
-                                                toWriteList.size(), writeInProgressList.size()
-                                        );
-                            }
-                            toWriteList.add(w);
-                        }
-                        else {
-                            break;
-                        }
-                    }
-
-                    if (toWriteList.isEmpty()) {
-                        break;
+                try { // lock acquired
+                    if (LOGGER.isTraceEnabled()) {
+                        LOGGER.trace("starting drain of the transmission queue with queue.size() <{}>", queue.size());
                     }
 
                     try {
-                        transmit(toWriteList);
+                        final boolean tlsRequiresOp = drainQueue();
+                        if (tlsRequiresOp) {
+                            if (LOGGER.isDebugEnabled()) {
+                                LOGGER
+                                        .debug(
+                                                "drain paused as eventloop selector needs to run due to tlsRequiresOp <{}>",
+                                                tlsRequiresOp
+                                        );
+                            }
+                            break;
+                        }
                     }
                     catch (CancelledKeyException cke) {
                         LOGGER
@@ -161,57 +153,74 @@ final class EgressImpl implements Egress {
         }
     }
 
-    private void transmit(final List<Writeable> toWriteList) throws IOException {
+    private boolean drainQueue() throws IOException {
 
+        // sockets use gathering read pattern and need a ByteBuffer[] (array)
+
+        // snapshot the queue for this drain attempt
+        Writeable[] snapshot = queue.toArray(new Writeable[0]);
+
+        // estimate number of buffers in the queue for array size
+        int numberOfBuffers = 0;
+        for (Writeable w : snapshot) {
+            numberOfBuffers += w.buffers().length;
+        }
+
+        // create the gathering write array
+        ByteBuffer[] writeBuffers = new ByteBuffer[numberOfBuffers];
+
+        // populate the array
+        int writeBuffersIndex = 0;
+
+        for (Writeable w : snapshot) {
+            for (ByteBuffer buffer : w.buffers()) {
+                writeBuffers[writeBuffersIndex] = buffer;
+                writeBuffersIndex++;
+            }
+        }
+
+        boolean tlsRequiresOp = false;
         try {
-
-            int numberOfBuffers = 0;
-            Iterator<Writeable> toWriteIterator = toWriteList.iterator();
-            while (toWriteIterator.hasNext()) {
-                Writeable w = toWriteIterator.next();
-                numberOfBuffers += w.buffers().length;
-            }
-
-            ByteBuffer[] writeBuffers = new ByteBuffer[numberOfBuffers];
-            int writeBuffersIndex = 0;
-
-            Iterator<Writeable> toWriteIterator2 = toWriteList.iterator();
-            while (toWriteIterator2.hasNext()) {
-                Writeable w = toWriteIterator2.next();
-
-                for (ByteBuffer buffer : w.buffers()) {
-                    writeBuffers[writeBuffersIndex] = buffer;
-                    writeBuffersIndex++;
+            final long bytesTransmitted = establishedContext.socket().write(writeBuffers);
+            if (LOGGER.isDebugEnabled()) {
+                long totalBytes = 0;
+                for (ByteBuffer b : writeBuffers) {
+                    totalBytes += b.limit();
                 }
-
-                toWriteIterator2.remove();
-                writeInProgressList.add(w);
-            }
-
-            establishedContext.socket().write(writeBuffers);
-
-            // remove written ones
-            Iterator<Writeable> writeableIterator = writeInProgressList.iterator();
-            while (writeableIterator.hasNext()) {
-                Writeable w = writeableIterator.next();
-                if (!w.hasRemaining()) {
-                    LOGGER.debug("complete write, closing written writeable");
-                    w.close();
-                    writeableIterator.remove();
-                }
-                else {
-                    LOGGER.debug("writable has still buffers, breaking");
-                    break;
-                }
+                LOGGER.debug("bytesTransmitted <{}> of totalBytes <{}>", bytesTransmitted, totalBytes);
             }
         }
         catch (NeedsReadException nre) {
             needRead.set(true);
             establishedContext.interestOps().add(OP_READ);
+            tlsRequiresOp = true;
         }
         catch (NeedsWriteException nwe) {
             establishedContext.interestOps().add(OP_WRITE);
+            tlsRequiresOp = true;
         }
+
+        // drain consumed ones from the queue
+
+        while (true) {
+            Writeable headPeek = queue.peek();
+
+            if (headPeek == null) {
+                // everything drained
+                break;
+            }
+
+            if (!headPeek.hasRemaining()) {
+                LOGGER.trace("headPeek written, polling out and closing");
+                Writeable consumedWriteable = queue.poll();
+                consumedWriteable.close();
+            }
+            else {
+                // there are still queued elements left with data
+                break;
+            }
+        }
+        return tlsRequiresOp;
     }
 
     @Override

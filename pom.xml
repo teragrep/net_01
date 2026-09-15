@@ -316,31 +316,21 @@
     </plugins>
   </build>
   <profiles>
+    <!-- Required when publishing to Maven Central -->
     <profile>
       <id>publish-maven-central</id>
-      <distributionManagement>
-        <repository>
-          <id>ossrh</id>
-          <name>Central Repository OSSRH</name>
-          <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-        <snapshotRepository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-      </distributionManagement>
       <build>
         <plugins>
           <plugin>
             <groupId>org.sonatype.central</groupId>
             <artifactId>central-publishing-maven-plugin</artifactId>
-            <version>0.4.0</version>
+            <version>0.5.0</version>
             <extensions>true</extensions>
             <configuration>
               <publishingServerId>central-sonatype-org</publishingServerId>
               <tokenAuth>true</tokenAuth>
               <autoPublish>true</autoPublish>
-              <waitUntil>published</waitUntil>
+              <waitUntil>validated</waitUntil>
             </configuration>
           </plugin>
           <plugin>
@@ -366,39 +356,18 @@
         </plugins>
       </build>
     </profile>
+    <!-- /Required when publishing to Maven Central -->
+    <!-- Required when publishing to GitHub Packages -->
     <profile>
       <id>publish-github-packages</id>
       <distributionManagement>
         <repository>
           <id>github</id>
           <name>GitHub Packages</name>
-          <url>https://maven.pkg.github.com/teragrep/net_01</url>
+          <url>https://maven.pkg.github.com/${env.GITHUB_REPOSITORY}</url>
         </repository>
       </distributionManagement>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-gpg-plugin</artifactId>
-            <version>1.6</version>
-            <executions>
-              <execution>
-                <id>sign-artifacts</id>
-                <goals>
-                  <goal>sign</goal>
-                </goals>
-                <phase>verify</phase>
-                <configuration>
-                  <gpgArguments>
-                    <arg>--pinentry-mode</arg>
-                    <arg>loopback</arg>
-                  </gpgArguments>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
+    <!-- Required when publishing to GitHub Packages -->
   </profiles>
 </project>

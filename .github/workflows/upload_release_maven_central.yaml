@@ -1,4 +1,4 @@
-name: Upload Release
+name: Upload Release to Maven Central
 
 on:
   release:
@@ -8,40 +8,29 @@ jobs:
   upload:
     name: Upload
     runs-on: ubuntu-latest
+    if: ${{ startsWith(github.repository, 'teragrep/') }}
 
     steps:
-      - uses: actions/checkout@v2
-          
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Cache Local Maven Repository
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
 
       - name: Setup Signing
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: 8.0.292+10
           distribution: 'adopt'
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
-      - name: Setup GitHub Packages
-        uses: actions/setup-java@v2
-        with:
-          java-version: 8.0.292+10
-          distribution: 'adopt'
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
-
-      - name: Publish to GitHub Packages
-        run: mvn --batch-mode -Drevision=${{ github.event.release.tag_name }} -Dsha1= -Dchangelist= clean deploy -Ppublish-github-packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-
-
       - name: Setup Maven Central
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v4
         with:
           java-version: 8.0.292+10
           distribution: 'adopt'
@@ -57,4 +46,3 @@ jobs:
           CENTRAL_SONATYPE_ORG_USERNAME: ${{ secrets.CENTRAL_SONATYPE_ORG_USERNAME }}
           CENTRAL_SONATYPE_ORG_PASSWORD: ${{ secrets.CENTRAL_SONATYPE_ORG_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-

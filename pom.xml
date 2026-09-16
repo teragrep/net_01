@@ -38,7 +38,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <revision>0.0.1</revision>
     <sha1></sha1>
-    <teragrep.buf_01.version>4.1.0</teragrep.buf_01.version>
+    <teragrep.buf_01.version>4.2.0</teragrep.buf_01.version>
     <teragrep.poj_01.version>4.0.0</teragrep.poj_01.version>
   </properties>
   <dependencies>

@@ -48,6 +48,7 @@ package com.teragrep.net_01.channel.context;
 import com.teragrep.buf_01.buffer.lease.TrackedLease;
 import com.teragrep.buf_01.buffer.lease.TrackedMemorySegmentLease;
 import com.teragrep.buf_01.buffer.lease.collection.TrackedLeaseCollection;
+import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
 import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollectionStub;
 import com.teragrep.net_01.channel.socket.WrittenResult;
 import org.slf4j.Logger;
@@ -59,7 +60,6 @@ import java.io.IOException;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.channels.CancelledKeyException;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -73,27 +73,18 @@ import static java.nio.channels.SelectionKey.OP_WRITE;
 final class EgressImpl implements Egress {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EgressImpl.class);
-
     private final EstablishedContext establishedContext;
-
     private final ConcurrentLinkedQueue<TrackedLeaseCollection<MemorySegment>> queue;
-    private final ArrayList<TrackedLeaseCollection<MemorySegment>> writeInProgressList; // lock protected
-
     private final Lock lock;
 
     // tls
     private final AtomicBoolean needRead;
 
-    private final List<TrackedLeaseCollection<MemorySegment>> toWriteList;
-
     EgressImpl(EstablishedContext establishedContext) {
         this.establishedContext = establishedContext;
         this.queue = new ConcurrentLinkedQueue<>();
-        this.writeInProgressList = new ArrayList<>();
         this.lock = new ReentrantLock();
         this.needRead = new AtomicBoolean();
-
-        this.toWriteList = new ArrayList<>();
     }
 
     // this must be thread-safe!
@@ -107,29 +98,19 @@ final class EgressImpl implements Egress {
         while (queue.peek() != null) {
             if (lock.tryLock()) {
                 try {
-                    while (true) {
-                        final TrackedLeaseCollection<MemorySegment> c = queue.poll();
-                        if (c != null) {
-                            if (LOGGER.isTraceEnabled()) {
-                                LOGGER
-                                        .trace(
-                                                "adding writable to toWriteList.size <{}>, writeInProgressList.size <{}>",
-                                                toWriteList.size(), writeInProgressList.size()
-                                        );
-                            }
-                            toWriteList.add(c);
-                        }
-                        else {
-                            break;
-                        }
-                    }
-
-                    if (toWriteList.isEmpty()) {
-                        break;
+                    if (LOGGER.isTraceEnabled()) {
+                        LOGGER.trace("Starting drain of the transmission queue with queue.size() <{}>", queue.size());
                     }
 
                     try {
-                        transmit(toWriteList);
+                        final boolean tlsRequiresOp = drainQueue();
+
+                        if (tlsRequiresOp) {
+                            if (LOGGER.isDebugEnabled()) {
+                                LOGGER.debug("Drain paused as eventLoop selector needs to run due to tlsRequiresOp <{}>", tlsRequiresOp);
+                            }
+                            break;
+                        }
                     }
                     catch (CancelledKeyException cke) {
                         LOGGER
@@ -164,51 +145,67 @@ final class EgressImpl implements Egress {
         }
     }
 
-    private void transmit(final List<TrackedLeaseCollection<MemorySegment>> toWriteList) throws IOException {
+    private boolean drainQueue() throws IOException {
+        final TrackedLeaseCollection<MemorySegment>[] snapshot = new TrackedMemorySegmentLeaseCollection[queue.size()];
+        int snapshotIndex = 0;
+        for (TrackedLeaseCollection<MemorySegment> leaseCollection : queue) {
+            snapshot[snapshotIndex] = leaseCollection;
+            snapshotIndex++;
+        }
+
+        int numberOfBuffers = 0;
+        for (final TrackedLeaseCollection<MemorySegment> w : snapshot) {
+            numberOfBuffers += w.leases().length;
+        }
+
+        final TrackedLease<MemorySegment>[] writeBuffers = new TrackedMemorySegmentLease[numberOfBuffers];
+
+        int i = 0;
+        for (final TrackedLeaseCollection<MemorySegment> w : snapshot) {
+            for (final TrackedLease<MemorySegment> lease : w.leases()) {
+                writeBuffers[i] = lease;
+                i++;
+            }
+        }
+
+        boolean tlsRequiresOp = false;
         try {
-            int numberOfBuffers = 0;
-            for (final TrackedLeaseCollection<MemorySegment> w : toWriteList) {
-                numberOfBuffers += w.leases().length;
-            }
-
-            final TrackedLease<MemorySegment>[] writeBuffers = new TrackedMemorySegmentLease[numberOfBuffers];
-
-            int i = 0;
-            for (final TrackedLeaseCollection<MemorySegment> w : toWriteList) {
-                for (final TrackedLease<MemorySegment> lease : w.leases()) {
-                    writeBuffers[i] = lease;
-                    i++;
-                }
-                writeInProgressList.add(w);
-            }
-
             LOGGER.debug("Writing to socket");
-
             final WrittenResult result = establishedContext.socket().write(writeBuffers);
-
             LOGGER.info("Transmit <{}> byte(s) to socket", result.bytes());
-            // remove written ones
-            final Iterator<TrackedLeaseCollection<MemorySegment>> writeableIterator = writeInProgressList.iterator();
-            while (writeableIterator.hasNext()) {
-                final TrackedLeaseCollection<MemorySegment> w = writeableIterator.next();
-                if (!w.hasNext()) {
-                    LOGGER.debug("complete write, closing written writeable");
-                    w.close();
-                    writeableIterator.remove();
-                }
-                else {
-                    LOGGER.debug("writable has still buffers, breaking");
-                    break;
-                }
-            }
         }
         catch (final NeedsReadException nre) {
             needRead.set(true);
             establishedContext.interestOps().add(OP_READ);
+            tlsRequiresOp = true;
         }
         catch (final NeedsWriteException nwe) {
             establishedContext.interestOps().add(OP_WRITE);
+            tlsRequiresOp = true;
         }
+
+        // Drain consumed leases from queue
+        while (true) {
+            final TrackedLeaseCollection<MemorySegment> headPeek = queue.peek();
+
+            if (headPeek == null) {
+                // everything drained
+                break;
+            }
+
+            if (!headPeek.hasNext()) {
+                LOGGER.trace("headPeek written, polling out and closing");
+                final TrackedLeaseCollection<MemorySegment> consumedLease = queue.poll();
+                if (consumedLease != null) {
+                    consumedLease.close();
+                }
+            } else {
+                // there are still queued elements left with data
+                break;
+            }
+        }
+
+        return tlsRequiresOp;
     }
 
     @Override

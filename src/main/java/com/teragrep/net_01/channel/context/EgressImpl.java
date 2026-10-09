@@ -47,7 +47,6 @@ package com.teragrep.net_01.channel.context;
 
 import com.teragrep.buf_01.buffer.lease.TrackedLease;
 import com.teragrep.buf_01.buffer.lease.TrackedMemorySegmentLease;
-import com.teragrep.buf_01.buffer.lease.collection.TrackedLeaseCollection;
 import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
 import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollectionStub;
 import com.teragrep.net_01.channel.socket.WrittenResult;
@@ -60,8 +59,6 @@ import java.io.IOException;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.channels.CancelledKeyException;
-import java.util.Iterator;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
@@ -74,7 +71,7 @@ final class EgressImpl implements Egress {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EgressImpl.class);
     private final EstablishedContext establishedContext;
-    private final ConcurrentLinkedQueue<TrackedLeaseCollection<MemorySegment>> queue;
+    private final ConcurrentLinkedQueue<TrackedMemorySegmentLeaseCollection> queue;
     private final Lock lock;
 
     // tls
@@ -89,7 +86,7 @@ final class EgressImpl implements Egress {
 
     // this must be thread-safe!
     @Override
-    public void accept(TrackedLeaseCollection<MemorySegment> coll) {
+    public void accept(TrackedMemorySegmentLeaseCollection coll) {
 
         if (!coll.isStub()) {
             queue.add(coll);
@@ -146,22 +143,16 @@ final class EgressImpl implements Egress {
     }
 
     private boolean drainQueue() throws IOException {
-        final TrackedLeaseCollection<MemorySegment>[] snapshot = new TrackedMemorySegmentLeaseCollection[queue.size()];
-        int snapshotIndex = 0;
-        for (TrackedLeaseCollection<MemorySegment> leaseCollection : queue) {
-            snapshot[snapshotIndex] = leaseCollection;
-            snapshotIndex++;
-        }
-
+        final TrackedMemorySegmentLeaseCollection[] snapshot = queue.toArray(new TrackedMemorySegmentLeaseCollection[0]);
         int numberOfBuffers = 0;
-        for (final TrackedLeaseCollection<MemorySegment> w : snapshot) {
+        for (final TrackedMemorySegmentLeaseCollection w : snapshot) {
             numberOfBuffers += w.leases().length;
         }
 
         final TrackedLease<MemorySegment>[] writeBuffers = new TrackedMemorySegmentLease[numberOfBuffers];
 
         int i = 0;
-        for (final TrackedLeaseCollection<MemorySegment> w : snapshot) {
+        for (final TrackedMemorySegmentLeaseCollection w : snapshot) {
             for (final TrackedLease<MemorySegment> lease : w.leases()) {
                 writeBuffers[i] = lease;
                 i++;
@@ -186,7 +177,7 @@ final class EgressImpl implements Egress {
 
         // Drain consumed leases from queue
         while (true) {
-            final TrackedLeaseCollection<MemorySegment> headPeek = queue.peek();
+            final TrackedMemorySegmentLeaseCollection headPeek = queue.peek();
 
             if (headPeek == null) {
                 // everything drained
@@ -195,7 +186,7 @@ final class EgressImpl implements Egress {
 
             if (!headPeek.hasNext()) {
                 LOGGER.trace("headPeek written, polling out and closing");
-                final TrackedLeaseCollection<MemorySegment> consumedLease = queue.poll();
+                final TrackedMemorySegmentLeaseCollection consumedLease = queue.poll();
                 if (consumedLease != null) {
                     consumedLease.close();
                 }

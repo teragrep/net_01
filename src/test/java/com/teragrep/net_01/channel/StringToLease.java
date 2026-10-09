@@ -46,8 +46,8 @@
 package com.teragrep.net_01.channel;
 
 import com.teragrep.buf_01.buffer.lease.TrackedLease;
-import com.teragrep.buf_01.buffer.lease.collection.TrackedLeaseCollection;
 import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
+import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollectionImpl;
 import com.teragrep.buf_01.buffer.pool.get.LeaseMultiGet;
 import com.teragrep.buf_01.buffer.pool.OpeningPool;
 import com.teragrep.buf_01.buffer.pool.get.TrackedLeaseMultiGet;
@@ -65,7 +65,7 @@ public final class StringToLease {
         this.pool = pool;
     }
 
-    public TrackedLeaseCollection<MemorySegment> toCollection() {
+    public TrackedMemorySegmentLeaseCollection toCollection() {
         final byte[] bytes = origin.getBytes(StandardCharsets.UTF_8);
         final TrackedLease<MemorySegment>[] trackedLeases = new TrackedLeaseMultiGet(new LeaseMultiGet(pool))
                 .getAsArray(bytes.length);
@@ -78,6 +78,6 @@ public final class StringToLease {
             }
         }
 
-        return new TrackedMemorySegmentLeaseCollection(trackedLeases);
+        return new TrackedMemorySegmentLeaseCollectionImpl(trackedLeases);
     }
 }

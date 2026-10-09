@@ -46,7 +46,7 @@
 package com.teragrep.net_01.channel.context;
 
 import com.teragrep.buf_01.buffer.lease.TrackedLease;
-import com.teragrep.buf_01.buffer.lease.collection.TrackedLeaseCollection;
+import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
 import com.teragrep.buf_01.buffer.pool.OpeningPool;
 import com.teragrep.net_01.channel.StringToLease;
 
@@ -75,7 +75,7 @@ public final class EchoingClock implements Clock {
 
         final String str = stringBuilder.toString();
 
-        final TrackedLeaseCollection<MemorySegment> c = new StringToLease(str, pool).toCollection();
+        final TrackedMemorySegmentLeaseCollection c = new StringToLease(str, pool).toCollection();
         ctx.egress().accept(c);
 
         consumer.accept(str);

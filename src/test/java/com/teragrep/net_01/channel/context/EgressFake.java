@@ -45,7 +45,7 @@
  */
 package com.teragrep.net_01.channel.context;
 
-import com.teragrep.buf_01.buffer.lease.collection.TrackedLeaseCollection;
+import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
 
 import java.lang.foreign.MemorySegment;
 import java.util.LinkedList;
@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class EgressFake implements Egress {
 
-    private final List<TrackedLeaseCollection<MemorySegment>> writtenFrames;
+    private final List<TrackedMemorySegmentLeaseCollection> writtenFrames;
 
     private final AtomicBoolean needRead;
 
@@ -64,7 +64,7 @@ public class EgressFake implements Egress {
     }
 
     @Override
-    public void accept(TrackedLeaseCollection<MemorySegment> coll) {
+    public void accept(TrackedMemorySegmentLeaseCollection coll) {
         writtenFrames.add(coll);
     }
 
@@ -84,7 +84,7 @@ public class EgressFake implements Egress {
     }
 
     // for testing
-    List<TrackedLeaseCollection<MemorySegment>> writtenFrames() {
+    List<TrackedMemorySegmentLeaseCollection> writtenFrames() {
         return writtenFrames;
     }
 }

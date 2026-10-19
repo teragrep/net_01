@@ -104,7 +104,11 @@ final class EgressImpl implements Egress {
 
                         if (tlsRequiresOp) {
                             if (LOGGER.isDebugEnabled()) {
-                                LOGGER.debug("Drain paused as eventLoop selector needs to run due to tlsRequiresOp <{}>", tlsRequiresOp);
+                                LOGGER
+                                        .debug(
+                                                "Drain paused as eventLoop selector needs to run due to tlsRequiresOp <{}>",
+                                                tlsRequiresOp
+                                        );
                             }
                             break;
                         }
@@ -143,7 +147,8 @@ final class EgressImpl implements Egress {
     }
 
     private boolean drainQueue() throws IOException {
-        final TrackedMemorySegmentLeaseCollection[] snapshot = queue.toArray(new TrackedMemorySegmentLeaseCollection[0]);
+        final TrackedMemorySegmentLeaseCollection[] snapshot = queue
+                .toArray(new TrackedMemorySegmentLeaseCollection[0]);
         int numberOfBuffers = 0;
         for (final TrackedMemorySegmentLeaseCollection w : snapshot) {
             numberOfBuffers += w.leases().length;
@@ -190,7 +195,8 @@ final class EgressImpl implements Egress {
                 if (consumedLease != null) {
                     consumedLease.close();
                 }
-            } else {
+            }
+            else {
                 // there are still queued elements left with data
                 break;
             }

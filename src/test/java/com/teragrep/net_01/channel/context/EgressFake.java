@@ -47,7 +47,6 @@ package com.teragrep.net_01.channel.context;
 
 import com.teragrep.buf_01.buffer.lease.collection.TrackedMemorySegmentLeaseCollection;
 
-import java.lang.foreign.MemorySegment;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
